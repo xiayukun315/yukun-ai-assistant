@@ -1,6 +1,6 @@
 # 屿坤的效率小站（Project A · v1）
 
-> 第一项目 Demo（替代原漫剧方向）。个人效率小网站：课表 + 番茄钟 + 本地 AI 答疑。
+> 第一项目 Demo。个人效率小网站：课表 + 番茄钟 + 本地 AI 答疑。
 > 技术栈：前端纯 HTML/JS，后端 Flask 代理本地 Ollama。零 API 成本、本地优先、立刻能跑。
 
 ## 功能
@@ -62,15 +62,4 @@ python app.py
 - 底部 canvas 柱状图展示**本周一到周日专注分钟数** + 今日/本周累计 + 本周次数。
 - 纯前端实现，改完刷新页面即生效（Flask debug 模式实时读盘）。
 
-## 模型挪到 D 盘（释放 C 盘，可选）
-若你手动装的 Ollama，模型默认在 `C:\Users\XIAYULUN\.ollama\models`（约 4.7GB）。想挪到 D：
-```bash
-# 1. 先彻底退出 Ollama（右下角托盘退出，或任务管理器结束 Ollama 进程）
-# 2. 设置持久环境变量
-setx OLLAMA_MODELS "D:\OllamaModels"
-# 3. 移动模型目录
-move C:\Users\XIAYULUN\.ollama\models D:\OllamaModels
-# 4. 重新打开 Ollama，验证
-ollama list
-```
 
