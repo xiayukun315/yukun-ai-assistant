@@ -1,0 +1,15 @@
+# Python / 虚拟环境
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# 本地数据（打卡记录其实在浏览器 localStorage，这里只是兜底）
+*.local
+
+# 运行日志
+*.log
+
+# 系统文件
+Thumbs.db
+.DS_Store

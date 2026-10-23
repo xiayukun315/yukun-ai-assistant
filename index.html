@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>屿坤的效率小站</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --accent:#4f8cff; --text:#e6e6e6; --good:#3ecf8e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:20px; text-align:center; border-bottom:1px solid #2a2d35; }
+  .wrap { max-width:900px; margin:0 auto; padding:20px; display:grid; gap:20px; }
+  .card { background:var(--card); border-radius:12px; padding:18px; }
+  .card h2 { margin-top:0; font-size:18px; }
+  /* 番茄钟 */
+  .timer { font-size:48px; text-align:center; font-variant-numeric:tabular-nums; }
+  .btns { display:flex; gap:10px; justify-content:center; margin-top:10px; }
+  button { background:var(--accent); color:#fff; border:none; padding:8px 16px; border-radius:8px; cursor:pointer; }
+  button.sec { background:#333; }
+  /* 课表 */
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { border:1px solid #2a2d35; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { background:#22262f; }
+  /* 答疑 */
+  #chat { height:240px; overflow-y:auto; background:#11141a; border-radius:8px; padding:10px; margin-bottom:10px; }
+  .msg { margin:6px 0; }
+  .msg.user { text-align:right; }
+  .msg.user span { background:var(--accent); color:#fff; padding:6px 10px; border-radius:10px; display:inline-block; }
+  .msg.bot span { background:#2a2d35; padding:6px 10px; border-radius:10px; display:inline-block; white-space:pre-wrap; }
+  .input-row { display:flex; gap:8px; }
+  .input-row input { flex:1; padding:8px; border-radius:8px; border:1px solid #2a2d35; background:#11141a; color:#fff; }
+  /* 打卡 */
+  .stat { display:flex; gap:24px; margin:10px 0 4px; }
+  .stat .num { font-size:30px; color:var(--good); font-variant-numeric:tabular-nums; }
+  .stat .lbl { opacity:.6; font-size:13px; }
+  canvas { width:100%; height:160px; background:#11141a; border-radius:8px; margin-top:8px; }
+  .hint { opacity:.5; font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<header><h1>📚 屿坤的效率小站</h1><p style="opacity:.6;margin:4px">课表 · 番茄钟 · 本地 AI 答疑 · 专注打卡</p></header>
+<div class="wrap">
+
+  <div class="card">
+    <h2>🍅 番茄钟（25 分钟专注，完成才能刷手机）</h2>
+    <div class="timer" id="timer">25:00</div>
+    <div class="btns">
+      <button onclick="startTimer()">开始</button>
+      <button class="sec" onclick="pauseTimer()">暂停</button>
+      <button class="sec" onclick="resetTimer()">重置</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📊 专注打卡（治"难坚持"：看得到才坚持得下去）</h2>
+    <div class="stat">
+      <div><div class="num" id="todayMin">0</div><div class="lbl">今日专注（分钟）</div></div>
+      <div><div class="num" id="weekMin">0</div><div class="lbl">本周专注（分钟）</div></div>
+      <div><div class="num" id="weekCnt">0</div><div class="lbl">本周打卡次数</div></div>
+    </div>
+    <canvas id="chart" width="800" height="160"></canvas>
+    <div class="btns" style="justify-content:flex-start;margin-top:10px">
+      <button class="sec" onclick="manualCheckin()">手动打卡（记录一次学习）</button>
+    </div>
+    <div class="hint">数据只存在你本机浏览器（localStorage），刷新不丢；换浏览器或清缓存会重置。</div>
+  </div>
+
+  <div class="card">
+    <h2>🗓️ 本周课表</h2>
+    <table id="schedule"><!-- 由下方 JS 注入 --></table>
+  </div>
+
+  <div class="card">
+    <h2>🤖 本地 AI 答疑（Ollama · qwen2.5:7b）</h2>
+    <div id="chat"></div>
+    <div class="input-row">
+      <input id="msg" placeholder="问点什么，比如：帮我规划今晚的学习" onkeydown="if(event.key==='Enter')send()" />
+      <button onclick="send()">发送</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===== 课表数据（从你的课表录入，可自行修改）=====
+const schedule = {
+  "周一": ["Java程序设计 10:05-11:40", "体育专选I 15:55-17:30"],
+  "周二": ["线性代数 14:00-15:35", "大学英语III 15:55-17:30"],
+  "周三": ["大学物理A2 08:10-09:45", "数据结构A 14:00-15:35", "Java程序设计 15:55-17:30"],
+  "周四": ["线性代数 08:10-09:45", "大学英语III 10:05-11:40", "大学物理A2 14:00-17:30", "形势与政策III 18:15-20:40"],
+  "周五": ["数据结构A 08:10-09:45", "大学物理A2 14:00-15:35", "体育专选I 15:55-17:30"]
+};
+const st = document.getElementById('schedule');
+let html = "<tr><th>星期</th><th>课程</th></tr>";
+for (const day in schedule) {
+  html += `<tr><td>${day}</td><td>${schedule[day].join("<br>")}</td></tr>`;
+}
+st.innerHTML = html;
+
+// ===== 专注打卡（localStorage 存储）=====
+const STORE_KEY = "focusRecords";
+function loadRecords() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveRecords(rs) { localStorage.setItem(STORE_KEY, JSON.stringify(rs)); }
+function todayStr() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0'); }
+function weekStart(d) { const x = new Date(d); const day = (x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
+
+function recordSession(minutes) {
+  const rs = loadRecords();
+  rs.push({ date: todayStr(), minutes: minutes, ts: Date.now() });
+  saveRecords(rs);
+  renderStats();
+}
+function manualCheckin() {
+  const m = prompt("这次学习了多少分钟？（数字，例如 25）", "25");
+  if (m === null) return;
+  const min = parseInt(m, 10);
+  if (isNaN(min) || min <= 0) { alert("请输入大于 0 的数字"); return; }
+  recordSession(min);
+}
+
+function renderStats() {
+  const rs = loadRecords();
+  const today = todayStr();
+  const ws = weekStart(new Date());
+  const days = ["周一","周二","周三","周四","周五","周六","周日"];
+  const totals = [0,0,0,0,0,0,0];
+  let weekCnt = 0;
+  rs.forEach(r => {
+    if (new Date(r.ts) >= ws) weekCnt++;
+    const rd = new Date(r.date + "T00:00:00");
+    const diff = Math.floor((rd - ws) / 86400000);
+    if (diff >= 0 && diff < 7) totals[diff] += r.minutes;
+  });
+  const todayMin = rs.filter(r => r.date === today).reduce((s,r)=>s+r.minutes,0);
+  const weekMin = totals.reduce((s,v)=>s+v,0);
+  document.getElementById('todayMin').textContent = todayMin;
+  document.getElementById('weekMin').textContent = weekMin;
+  document.getElementById('weekCnt').textContent = weekCnt;
+  drawChart(days, totals);
+}
+
+function drawChart(days, totals) {
+  const c = document.getElementById('chart');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height, pad = 30;
+  ctx.clearRect(0,0,W,H);
+  const maxV = Math.max(60, ...totals);
+  const bw = (W - pad*2) / 7;
+  ctx.font = "13px system-ui";
+  ctx.textAlign = "center";
+  for (let i=0;i<7;i++){
+    const x = pad + i*bw + bw/2;
+    const h = (totals[i]/maxV) * (H - pad*2);
+    const y = H - pad - h;
+    ctx.fillStyle = totals[i] > 0 ? "#3ecf8e" : "#2a2d35";
+    ctx.fillRect(x - bw*0.3, y, bw*0.6, h);
+    ctx.fillStyle = "#9aa0aa";
+    ctx.fillText(days[i], x, H - pad + 16);
+    if (totals[i] > 0) ctx.fillText(totals[i], x, y - 6);
+  }
+}
+
+// ===== 番茄钟 =====
+let remain = 25 * 60, timerId = null;
+function fmt(s) { return String(Math.floor(s / 60)).padStart(2, '0') + ":" + String(s % 60).padStart(2, '0'); }
+function tick() {
+  remain--;
+  document.getElementById('timer').textContent = fmt(remain);
+  if (remain <= 0) {
+    clearInterval(timerId); timerId = null;
+    recordSession(25);                       // 完整跑完一次 = 自动打卡 25 分钟
+    alert("专注完成！已自动打卡 25 分钟，可以去刷手机奖励一下了 🎉");
+    remain = 25 * 60; document.getElementById('timer').textContent = fmt(remain);
+  }
+}
+function startTimer() { if (!timerId) timerId = setInterval(tick, 1000); }
+function pauseTimer() { clearInterval(timerId); timerId = null; }
+function resetTimer() { pauseTimer(); remain = 25 * 60; document.getElementById('timer').textContent = fmt(remain); }
+
+// ===== 本地 AI 答疑（SSE 流式接收）=====
+async function send() {
+  const input = document.getElementById('msg');
+  const text = input.value.trim(); if (!text) return;
+  input.value = "";
+  addMsg('user', text);
+  const botSpan = addMsg('bot', '思考中…');
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    botSpan.textContent = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = dec.decode(value);
+      chunk.split('\n\n').forEach(line => {
+        if (line.startsWith('data: ')) {
+          const data = JSON.parse(line.slice(6));
+          if (data.token) botSpan.textContent += data.token;
+          if (data.error) botSpan.textContent = "⚠️ " + data.error;
+        }
+      });
+    }
+  } catch (e) {
+    botSpan.textContent = "⚠️ 连接失败，确认 Ollama 已启动且拉取了 qwen2.5:7b";
+  }
+}
+function addMsg(role, text) {
+  const chat = document.getElementById('chat');
+  const d = document.createElement('div'); d.className = 'msg ' + role;
+  const s = document.createElement('span'); s.textContent = text; d.appendChild(s);
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+  return s;
+}
+
+// 页面加载时画一次统计
+renderStats();
+</script>
+</body>
+</html>
